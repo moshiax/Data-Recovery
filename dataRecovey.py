@@ -1,10 +1,44 @@
 import os
 import threading
 import time
-import pyfiglet
 from pathlib import Path
-
 global letter, recoveredLocation, available_drives, total_iteration
+
+file_formats = {
+    #======= IMAGES =====#
+    'jpg': {'enabled': 1, 'start': b'\xff\xd8\xff\xe0\x00\x10\x4a\x46', 'end': b'\xff\xd9', 'offset': 2},
+    'png': {'enabled': 1, 'start': b'\x89\x50\x4e\x47', 'end': b'\x49\x45\x4e\x44\xae\x42\x60\x82', 'offset': 8},
+    'jpeg': {'enabled': 1, 'start': b'\xff\xd8\xff\xe0', 'end': b'\xff\xd9', 'offset': 2},
+    'bmp': {'enabled': 1, 'start': b'\x42\x4d', 'end': b'\x00\x00\x00\x00', 'offset': 0},
+    'gif': {'enabled': 1, 'start': b'\x47\x49\x46\x38', 'end': b'\x3b', 'offset': 0},
+
+    #======= ARCHIVES =====#
+    'zip': {'enabled': 1, 'start': b'\x50\x4b\x03\x04\x14', 'end': b'\x50\x4b\x05\x06', 'offset': 4},
+    'rar': {'enabled': 1, 'start': b'\x52\x61\x72\x21\x1a\x07', 'end': b'\x00\x00\x00\x00', 'offset': 0},
+    '7z': {'enabled': 1, 'start': b'\x37\x7a\xbc\xaf\x27\x1c', 'end': b'\x00\x00\x00\x00', 'offset': 0},
+    'tar': {'enabled': 1, 'start': b'\x75\x73\x74\x61\x72', 'end': b'\x00\x00\x00\x00', 'offset': 0},
+
+    #======= VIDEOS =====#
+    'mp4': {'enabled': 1, 'start': b'\x66\x74\x79\x70\x69\x73\x6f\x6d', 'end': b'\x6d\x64\x61\x74', 'offset': 4},
+    'avi': {'enabled': 1, 'start': b'\x52\x49\x46\x46', 'end': b'\x4c\x49\x53\x54', 'offset': 0},
+    'mkv': {'enabled': 1, 'start': b'\x1a\x45\xdf\xa3', 'end': b'\x42\x82', 'offset': 0},
+    'mov': {'enabled': 1, 'start': b'\x6d\x6f\x6f\x76', 'end': b'\x66\x72\x65\x65', 'offset': 0},
+    'flv': {'enabled': 1, 'start': b'\x46\x4c\x56\x01', 'end': b'\x46\x4c\x56\x02', 'offset': 0},
+    'webm': {'enabled': 1, 'start': b'\x1a\x45\xdf\xa3', 'end': b'\x42\x82', 'offset': 0},
+
+    #======= DOCUMENTS =====#
+    'pdf': {'enabled': 0, 'start': b'\x25\x50\x44\x46\x2D', 'end': b'\x0a\x25\x25\x45\x4f\x46', 'offset': 6},
+    'docx': {'enabled': 1, 'start': b'\x50\x4b\x03\x04\x14', 'end': b'\x50\x4b\x05\x06', 'offset': 4},
+    'xlsx': {'enabled': 1, 'start': b'\x50\x4b\x03\x04\x14', 'end': b'\x50\x4b\x05\x06', 'offset': 4},
+    'pptx': {'enabled': 1, 'start': b'\x50\x4b\x03\x04\x14', 'end': b'\x50\x4b\x05\x06', 'offset': 4},
+
+    #======= AUDIO =====#
+    'mp3': {'enabled': 1, 'start': b'\x49\x44\x33', 'end': b'\x54\x41\x49\x46\x00', 'offset': 0},
+    'wav': {'enabled': 1, 'start': b'\x52\x49\x46\x46', 'end': b'\x57\x41\x56\x45', 'offset': 0},
+    'flac': {'enabled': 1, 'start': b'\x66\x4c\x61\x43', 'end': b'\x00\x00\x00\x00', 'offset': 0},
+    'ogg': {'enabled': 1, 'start': b'\x4f\x67\x67\x53', 'end': b'\x00\x00\x00\x00', 'offset': 0},
+}
+
 
 class Recovery:
     def __init__(self, filetype):
@@ -24,12 +58,15 @@ class Recovery:
         drec = False
         rcvd = 0
 
+        format_folder = recoveredLocation / self._fileName
+        format_folder.mkdir(exist_ok=True) 
+
         while byte:
             found = byte.find(self._fileStart)
             if found >= 0:
                 drec = True
-                print(f'==== Found {self._fileName} at location: ' + str(hex(found+(size*offs))) + ' ====')
-                fileN = open(f'{recoveredLocation}\\' + str(rcvd) + f'.{self._fileName}', "wb")
+                print(f'==== Found {self._fileName} at location: ' + str(hex(found+(size*offs))) + ' ====') 
+                fileN = open(f'{format_folder}\\' + str(rcvd) + f'.{self._fileName}', "wb")
                 fileN.write(byte[found:])
                 while drec:
                     byte = fileD.read(size)
@@ -37,7 +74,8 @@ class Recovery:
                     if bfind >= 0:
                         fileN.write(byte[:bfind+self._fileOffSet])
                         fileD.seek((offs+1)*size)
-                        print(f'==== Wrote {self._fileName} to location: ' + str(rcvd) + f'.{self._fileName} ====\n')
+                        print(f'==== Wrote {self._fileName} to location: {rcvd}.{self._fileName} ====')
+
                         drec = False
                         rcvd += 1
                         fileN.close()
@@ -45,20 +83,6 @@ class Recovery:
             byte = fileD.read(size)
             offs += 1
         fileD.close()
-
-def progress_bar(t_i, c_i, bar_length, fill):
-    percent = f"{100 * c_i / float(t_i):.1f}"
-    percent = 100 * c_i / float(t_i)
-    fill_length = bar_length * c_i // t_i
-    bar = fill * fill_length + "-" * (bar_length - fill_length)
-    print(f"\rLoading: |{bar}| {percent}%", end="")
-    if c_i == t_i:
-        print("\nRunning.........")
-
-print("="*100)
-print(pyfiglet.figlet_format("Data Recovey Tool", font='starwars',justify="center", width=100))
-print("="*100)
-
 
 total_iteration = 50
 
@@ -69,10 +93,7 @@ recoveredLocation.mkdir(exist_ok=True)
 print(f'Recoved data will be saved to {recoveredLocation}')
 print(f"Available Drives are: {available_drives}")
 
-pdf = Recovery('pdf')
-jpg = Recovery('jpg')
-zip = Recovery('zip')
-png = Recovery('png')
+recovery_objects = {fmt: Recovery(fmt) for fmt, settings in file_formats.items() if settings['enabled']}
 
 while True:
     letter = input("Enter Removable Drive Letter Or 'Exit' to quit the program: ").capitalize()
@@ -80,22 +101,20 @@ while True:
         break
     elif letter[0] in available_drives:
         for i in range(total_iteration + 1):
-            progress_bar(total_iteration, i, 15, ">")
             time.sleep(0.1)
 
-        thread1 = threading.Thread(target=pdf.DataRecovery, args=('pdf', b'\x25\x50\x44\x46\x2D', b'\x0a\x25\x25\x45\x4f\x46', 6))
-        thread2 = threading.Thread(target=jpg.DataRecovery, args=('jpg', b'\xff\xd8\xff\xe0\x00\x10\x4a\x46', b'\xff\xd9', 2))
-        thread3 = threading.Thread(target=zip.DataRecovery, args=('zip', b'\x50\x4b\x03\x04\x14', b'\x50\x4b\x05\x06', 4))
-        thread4 = threading.Thread(target=png.DataRecovery, args=('png', b'\x89\x50\x4e\x47', b'\x49\x45\x4e\x44\xae\x42\x60\x82', 8))
+        threads = []
+        for fmt, settings in file_formats.items():
+            if settings['enabled']:
+                thread = threading.Thread(
+                    target=recovery_objects[fmt].DataRecovery, 
+                    args=(fmt, settings['start'], settings['end'], settings['offset'])
+                )
+                threads.append(thread)
+                thread.start()
 
         startpy = time.time()
-        thread1.start()
-        thread2.start()
-        thread3.start()
-        thread4.start()
-        thread1.join()
-        thread2.join()
-        thread3.join()
-        thread4.join()
+        for thread in threads:
+            thread.join()
         endpy = time.time()
-        print(endpy-startpy)
+        print(f"Time taken: {endpy-startpy} seconds")

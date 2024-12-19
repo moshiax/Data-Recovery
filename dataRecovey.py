@@ -1,7 +1,13 @@
 import os
 import threading
 import time
+import hashlib
+import json
 from pathlib import Path
+from colorama import init, Fore
+
+init(autoreset=True)
+
 global letter, recoveredLocation, available_drives, total_iteration
 
 file_formats = {
@@ -39,10 +45,28 @@ file_formats = {
     'ogg': {'enabled': 1, 'start': b'\x4f\x67\x67\x53', 'end': b'\x00\x00\x00\x00', 'offset': 0},
 }
 
-
 class Recovery:
     def __init__(self, filetype):
         self.filetype = filetype
+        self.hash_file = recoveredLocation / "recovered_hashes.json"
+        self.hashes = self._load_hashes()
+
+    def _load_hashes(self):
+        if self.hash_file.exists():
+            with open(self.hash_file, "r") as f:
+                return set(json.load(f))
+        return set()
+
+    def _save_hashes(self):
+        with open(self.hash_file, "w") as f:
+            json.dump(list(self.hashes), f, indent=4)
+
+    def _calculate_sha256(self, file_path):
+        sha256 = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            while chunk := f.read(8192):
+                sha256.update(chunk)
+        return sha256.hexdigest()
 
     def DataRecovery(self, fileName, fileStart, fileEnd, fileOffSet):
         self._fileName = fileName
@@ -59,34 +83,41 @@ class Recovery:
         rcvd = 0
 
         format_folder = recoveredLocation / self._fileName
-        format_folder.mkdir(exist_ok=True) 
+        format_folder.mkdir(exist_ok=True)
 
         while byte:
             found = byte.find(self._fileStart)
             if found >= 0:
                 drec = True
-                print(f'==== Found {self._fileName} at location: ' + str(hex(found+(size*offs))) + ' ====') 
-                fileN = open(f'{format_folder}\\' + str(rcvd) + f'.{self._fileName}', "wb")
-                fileN.write(byte[found:])
-                while drec:
-                    byte = fileD.read(size)
-                    bfind = byte.find(self._fileEnd)
-                    if bfind >= 0:
-                        fileN.write(byte[:bfind+self._fileOffSet])
-                        fileD.seek((offs+1)*size)
-                        print(f'==== Wrote {self._fileName} to location: {rcvd}.{self._fileName} ====')
+                recovered_file_path = format_folder / f"{rcvd}.{self._fileName}"
 
-                        drec = False
-                        rcvd += 1
-                        fileN.close()
-                    else: fileN.write(byte)
+                with open(recovered_file_path, "wb") as fileN:
+                    fileN.write(byte[found:])
+                    while drec:
+                        byte = fileD.read(size)
+                        bfind = byte.find(self._fileEnd)
+                        if bfind >= 0:
+                            fileN.write(byte[:bfind + self._fileOffSet])
+                            drec = False
+                        else:
+                            fileN.write(byte)
+
+                file_hash = self._calculate_sha256(recovered_file_path)
+                if file_hash in self.hashes:
+                    print(Fore.LIGHTBLACK_EX + f"File already recovered (hash: {file_hash}). Skipping...")
+                    recovered_file_path.unlink()
+                else:
+                    self.hashes.add(file_hash)
+                    self._save_hashes()
+                    print(Fore.GREEN + f"==== Wrote {self._fileName} successfully! (hash: {file_hash}) ====")
+
+                rcvd += 1
             byte = fileD.read(size)
             offs += 1
         fileD.close()
 
 total_iteration = 50
-
-available_drives = [ chr(x) + "" for x in range(65,91) if os.path.exists(chr(x) + ":") ]
+available_drives = [chr(x) + "" for x in range(65, 91) if os.path.exists(chr(x) + ":")]
 cwd = Path.cwd()
 recoveredLocation = cwd / 'RecoveredData'
 recoveredLocation.mkdir(exist_ok=True)
@@ -97,7 +128,7 @@ recovery_objects = {fmt: Recovery(fmt) for fmt, settings in file_formats.items()
 
 while True:
     letter = input("Enter Removable Drive Letter Or 'Exit' to quit the program: ").capitalize()
-    if letter == "Exit" or letter == "exit" or letter == "EXIT":
+    if letter.lower() == "exit":
         break
     elif letter[0] in available_drives:
         for i in range(total_iteration + 1):
@@ -118,3 +149,4 @@ while True:
             thread.join()
         endpy = time.time()
         print(f"Time taken: {endpy-startpy} seconds")
+        

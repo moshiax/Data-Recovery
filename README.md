@@ -15,8 +15,8 @@ This tool showcases expertise in file systems, binary data processing, and Pytho
 # To use source code
 
 **Step 1**
-Install pyfiglet*
->```pip install pyfiglet```
+Install colorama*
+>```pip install colorama```
 
 **Step 2**
 Make sure to launch finshed code via admin terminal.
